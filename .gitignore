@@ -1,0 +1,23 @@
+# Python
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+build/
+
+# Env
+.env
+.env.*
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+github/
