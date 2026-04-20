@@ -25,50 +25,69 @@ No coding required. Run a full strategy simulation in under 2 minutes.
 
 | Feature | Description |
 |---|---|
-| **Race Selector** | Planned frontend feature for selecting season/circuit presets |
+| **Race Selector** | Select seeded races from the FastF1 schedule |
 | **Strategy Engine** | Optimal pit lap computation for 1-stop and 2-stop strategies |
 | **Undercut Detector** | Identifies the lap range where pitting first yields a net positive gap |
 | **Monte Carlo Sim** | SC probability-weighted strategy win distribution over N iterations |
-| **Backtest Mode** | Planned feature for comparing model recommendation vs historical strategy |
-| **Live Charts** | Planned frontend visualization layer |
+| **Backtest Mode** | Compare model recommendation vs historical strategy |
+| **Live Charts** | Degradation, undercut window, and Monte Carlo distribution charts |
 
 ---
 
 ## 🏗️ Architecture
 
-```
-┌─────────────────────────────────────────────────────┐
-│               CLIENT  (React / Vite)                │
-│      Zustand Store │ Recharts │ Axios               │
-└───────────────────────┬─────────────────────────────┘
-                        │ REST / JSON
-┌───────────────────────▼─────────────────────────────┐
-│           API GATEWAY  (Node / Express :3001)        │
-│   /api/health  /api/strategy/*  /api/monte/*        │
-│   Redis cache │ Rate limiting │ BullMQ producer      │
-└──────────┬──────────────────────────┬───────────────┘
-           │ HTTP                     │ BullMQ (async)
-┌──────────▼──────────┐   ┌──────────▼──────────────┐
-│  STRATEGY ENGINE    │   │   BULLMQ WORKER          │
-│  (Python FastAPI    │   │   Monte Carlo processor  │
-│   :8000)            │   │   Results → MongoDB      │
-└─────────────────────┘   └─────────────────────────┘
-┌─────────────────────────────────────────────────────┐
-│                    DATA LAYER                       │
-│  MongoDB: app datastore                             │
-│  Redis: API cache (default TTL 60s) + BullMQ queues │
-└─────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  subgraph Client
+    FE[React / Vite\nZustand + Recharts]
+  end
+
+  subgraph Gateway
+    API[API Gateway :3001\n/health /races /backtest\n/strategy/* /monte/*]
+    CACHE[Redis Cache + Rate Limit]
+    QUEUE[BullMQ Producer]
+  end
+
+  subgraph Engine
+    SE[Strategy Engine :8000\nFastAPI]
+  end
+
+  subgraph Async
+    WORKER[BullMQ Worker\nMonte Carlo]
+  end
+
+  subgraph Data
+    MONGO[MongoDB\nraces + lap_data + results]
+    REDIS[Redis\ncache + queues]
+  end
+
+  subgraph Ingestion
+    FASTF1[FastF1 seed scripts\nseed_races.py + seed_lap_data.py]
+    CACHEFS[.fastf1-cache]
+  end
+
+  FE -->|REST/JSON| API
+  API --> SE
+  API --> CACHE
+  API --> QUEUE
+  QUEUE --> WORKER
+  WORKER --> MONGO
+  API --> MONGO
+  CACHE --> REDIS
+  QUEUE --> REDIS
+  FASTF1 --> MONGO
+  FASTF1 --> CACHEFS
 ```
 
 ### Services
 
 | Service | Language | Port | Responsibility |
 |---|---|---|---|
-| React Frontend | TypeScript | 5173 | Planned (not scaffolded yet) |
+| React Frontend | TypeScript | 5173 | Strategy simulator UI |
 | API Gateway | Node.js 20 | 3001 | Routing, caching, BullMQ producer |
 | Strategy Engine | Python 3.11 | 8000 | Pit window calc, deg model, undercut |
 | BullMQ Worker | Node.js 20 | — | Async Monte Carlo processing |
-| MongoDB | MongoDB 7 | 27017 | Gateway datastore |
+| MongoDB | MongoDB 7 | 27017 | Races, lap data, and async results |
 | Redis | Redis 7 | 6379 | Response cache + queue backend |
 
 ---
@@ -141,20 +160,19 @@ win_pct[s] = win_counts[s] / N
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/races` | List races (paginated, filter by season) |
-| `GET` | `/api/races/:id/laps` | Lap data with compound breakdown |
+| `GET` | `/api/races` | List races (filter by `season`) |
 | `POST` | `/api/strategy/compute` | Synchronous pit window computation (<3s) |
 | `POST` | `/api/monte/run` | Enqueue Monte Carlo job → returns `job_id` |
 | `GET` | `/api/monte/result/:jobId` | Poll MC job result |
-| `GET` | `/api/backtest/:raceId` | Cached backtest for a race |
+| `GET` | `/api/backtest?raceId=YYYY-R` | Backtest for a race |
 
 ### Strategy Engine `:8000`
 
 | Method | Endpoint | Body | Response |
 |---|---|---|---|
-| `POST` | `/compute` | `{ base_pace, deg_k, pit_delta, total_laps, compounds }` | `{ optimal_pit, total_time, undercut_window }` |
-| `POST` | `/pit-window` | `{ base_pace, deg_k, pit_delta, total_laps, target_lap }` | `{ gain_s, is_undercut, is_overcut }` |
-| `POST` | `/monte-carlo` | `{ ...params, n_iterations, sc_probability }` | `{ distribution: [{ strategy, win_pct }] }` |
+| `POST` | `/compute` | `{ base_pace_s, pit_delta_s, total_laps, stop_count, compounds }` | `{ optimal, undercut_window, all_1stop_times, all_2stop_times }` |
+| `POST` | `/pit-window` | `{ base_pace_s, pit_delta_s, total_laps, target_lap, compound_old, compound_new, rival_tyre_age }` | `{ gain_s, is_undercut, is_overcut }` |
+| `POST` | `/monte-carlo` | `{ base_pace_s, pit_delta_s, total_laps, sc_probability, n_iterations, compounds }` | `{ distribution: [{ strategy, win_pct }] }` |
 | `GET` | `/health` | — | `{ status: "ok" }` |
 
 Interactive docs available at `http://localhost:8000/docs` (FastAPI Swagger UI).
@@ -188,8 +206,10 @@ f1-strategy-simulator/
 │       └── routers/             # /compute, /pit-window, /monte-carlo
 │
 ├── scripts/
-│   ├── seed_races.js            # Ergast API ingestion
-│   └── seed_lap_data.js         # OpenF1 lap data ingestion
+│   ├── seed_races.py            # FastF1 race schedule ingestion
+│   ├── seed_lap_data.py         # FastF1 lap data ingestion
+│   ├── seed_races.js            # Node shim → seed_races.py
+│   └── seed_lap_data.js         # Node shim → seed_lap_data.py
 │
 └── docker-compose.yml           # Local dev: Mongo + Redis
 ```
@@ -230,8 +250,21 @@ docker-compose up -d   # starts MongoDB + Redis
 
 ```bash
 cd scripts
-node seed_races.js       # pulls 2018-2024 race list from Ergast
-node seed_lap_data.js    # pulls lap data from OpenF1 (takes ~5 min)
+python -m pip install -r requirements.txt
+node seed_races.js       # pulls 2018-2024 race list via FastF1
+node seed_lap_data.js    # pulls lap data via FastF1 (can take a while)
+```
+
+On Windows, point the shim at your venv if needed:
+```powershell
+$env:PYTHON="D:\Projects\f1-strategy-simulator\.venv\Scripts\python.exe"
+```
+
+Optional flags:
+```bash
+node seed_races.js --start=2018 --end=2024
+node seed_lap_data.js --season=2023 --round=1
+node seed_lap_data.js --season=2023 --limit=5000
 ```
 
 ### 4. Run all services
@@ -254,10 +287,11 @@ Open [http://localhost:5173](http://localhost:5173)
 Create `api-gateway/.env`:
 
 ```env
-MONGODB_URI=mongodb://localhost:27017/f1sim
+MONGO_URL=mongodb://localhost:27017/f1sim
 REDIS_URL=redis://localhost:6379
 STRATEGY_ENGINE_URL=http://localhost:8000
 PORT=3001
+FASTF1_CACHE=./scripts/.fastf1-cache
 ```
 
 ---
@@ -266,12 +300,12 @@ PORT=3001
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 18, Vite, TypeScript, Zustand, Recharts, D3.js |
+| Frontend | React 18, Vite, TypeScript, Zustand, Recharts |
 | API Gateway | Node.js 20, Express, BullMQ, Mongoose |
 | Strategy Engine | Python 3.11, FastAPI, NumPy, SciPy |
 | Database | MongoDB Atlas (M0 free tier) |
 | Cache / Queue | Redis (Upstash free tier) |
-| External Data | [OpenF1 API](https://openf1.org), [Ergast API](https://ergast.com/mrd/) |
+| External Data | [FastF1](https://theoehrly.github.io/Fast-F1/) |
 | Deployment | Vercel (frontend), Render (backend services) |
 
 ---
