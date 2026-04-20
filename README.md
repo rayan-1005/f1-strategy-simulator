@@ -37,31 +37,35 @@ No coding required. Run a full strategy simulation in under 2 minutes.
 ## 🏗️ Architecture
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": { "primaryColor": "#111", "primaryTextColor": "#f5f5f5", "lineColor": "#888", "tertiaryColor": "#161616" }}}%%
 flowchart LR
-  subgraph Client
+  classDef surface fill:#111,stroke:#2a2a2a,color:#f5f5f5;
+  classDef accent fill:#161616,stroke:#e8002d,color:#f5f5f5;
+
+  subgraph client["Client"]
     FE[React / Vite\nZustand + Recharts]
   end
 
-  subgraph Gateway
+  subgraph gateway["Gateway"]
     API[API Gateway :3001\n/health /races /backtest\n/strategy/* /monte/*]
     CACHE[Redis Cache + Rate Limit]
     QUEUE[BullMQ Producer]
   end
 
-  subgraph Engine
+  subgraph engine["Engine"]
     SE[Strategy Engine :8000\nFastAPI]
   end
 
-  subgraph Async
+  subgraph asyncflow["Async"]
     WORKER[BullMQ Worker\nMonte Carlo]
   end
 
-  subgraph Data
+  subgraph data["Data"]
     MONGO[MongoDB\nraces + lap_data + results]
     REDIS[Redis\ncache + queues]
   end
 
-  subgraph Ingestion
+  subgraph ingestion["Ingestion"]
     FASTF1[FastF1 seed scripts\nseed_races.py + seed_lap_data.py]
     CACHEFS[.fastf1-cache]
   end
@@ -77,6 +81,15 @@ flowchart LR
   QUEUE --> REDIS
   FASTF1 --> MONGO
   FASTF1 --> CACHEFS
+
+  class FE,API,SE,WORKER,MONGO,REDIS,CACHE,QUEUE,FASTF1,CACHEFS surface;
+  class API,SE accent;
+  style client fill:#0a0a0a,stroke:#2a2a2a,color:#f5f5f5;
+  style gateway fill:#0a0a0a,stroke:#2a2a2a,color:#f5f5f5;
+  style engine fill:#0a0a0a,stroke:#2a2a2a,color:#f5f5f5;
+  style asyncflow fill:#0a0a0a,stroke:#2a2a2a,color:#f5f5f5;
+  style data fill:#0a0a0a,stroke:#2a2a2a,color:#f5f5f5;
+  style ingestion fill:#0a0a0a,stroke:#2a2a2a,color:#f5f5f5;
 ```
 
 ### Services
