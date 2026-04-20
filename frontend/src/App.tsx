@@ -1,6 +1,7 @@
 import { Suspense, lazy } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { motion } from "framer-motion";
+import { Footer } from "./components/Footer";
 
 const SimulatorPage = lazy(() =>
   import("./pages/SimulatorPage").then((m) => ({ default: m.SimulatorPage })),
@@ -15,9 +16,12 @@ const BacktestPage = lazy(() =>
 function HeroHeader() {
   return (
     <header className="hero-strip">
-      <h1>F1 Strategy <span>Simulator</span></h1>
+      <h1>
+        F1 Strategy <span>Simulator</span>
+      </h1>
       <p className="hero-subtitle">
-        Telemetry-noir interface for strategy simulation, Monte Carlo runs, and backtest analysis.
+        Simulate pit stop strategies, run what-if scenarios, and backtest
+        against real race data.
       </p>
     </header>
   );
@@ -60,6 +64,7 @@ export default function App() {
           </Routes>
         </Suspense>
       </motion.div>
+      <Footer />
     </div>
   );
 }

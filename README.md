@@ -383,18 +383,6 @@ Services communicate via docker network `f1sim-network`.
 
 ---
 
-## 🗓️ Roadmap
-
-- [x] Project proposal & architecture design
-- [ ] Week 1 — Data pipeline (Ergast + OpenF1 ingestion, MongoDB schema)
-- [ ] Week 2 — Strategy engine V1 (degradation model, pit window endpoint)
-- [ ] Week 3 — Monte Carlo module (safety car sim)
-- [ ] Week 4 — React frontend MVP (sliders, charts, recommendation panel)
-- [ ] Week 5 — Backtest module (sim vs. actual for 5 races)
-- [ ] Week 6 — Polish, deployment, demo video
-
----
-
 ## 📊 Performance Targets
 
 | Metric | Target |

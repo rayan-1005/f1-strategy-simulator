@@ -663,3 +663,34 @@ input:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+.app-footer {
+  text-align: center;
+  padding: 24px 16px;
+  border-top: 1px solid var(--border);
+  margin-top: 40px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--gray);
+}
+
+.app-footer a {
+  color: var(--red);
+  text-decoration: none;
+  transition: color 200ms ease;
+}
+
+.app-footer a:hover {
+  color: var(--white);
+}
+
+.app-footer .heart {
+  display: inline-block;
+  margin: 0 4px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
