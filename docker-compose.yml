@@ -6,6 +6,8 @@ services:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+    networks:
+      - f1sim-network
 
   redis:
     image: redis:7-alpine
@@ -14,8 +16,49 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - f1sim-network
+
+  strategy-engine:
+    build: ./strategy-engine
+    container_name: f1sim-engine
+    ports:
+      - "8000:8000"
+    networks:
+      - f1sim-network
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: f1sim-api
+    ports:
+      - "3001:3001"
+    environment:
+      MONGO_URL: mongodb://mongo:27017/f1sim
+      REDIS_URL: redis://redis:6379
+      STRATEGY_ENGINE_URL: http://strategy-engine:8000
+      PORT: 3001
+    depends_on:
+      - mongo
+      - redis
+      - strategy-engine
+    networks:
+      - f1sim-network
+
+  frontend:
+    build: ./frontend
+    container_name: f1sim-web
+    ports:
+      - "80:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - f1sim-network
 
 volumes:
   mongo_data:
   redis_data:
+
+networks:
+  f1sim-network:
+    driver: bridge
 YAML

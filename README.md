@@ -222,9 +222,14 @@ f1-strategy-simulator/
 │   ├── seed_races.py            # FastF1 race schedule ingestion
 │   ├── seed_lap_data.py         # FastF1 lap data ingestion
 │   ├── seed_races.js            # Node shim → seed_races.py
-│   └── seed_lap_data.js         # Node shim → seed_lap_data.py
+│   ├── seed_lap_data.js         # Node shim → seed_lap_data.py
+│   └── requirements.txt         # Python deps (fastf1, pymongo, python-dotenv)
 │
-└── docker-compose.yml           # Local dev: Mongo + Redis
+├── api-gateway/Dockerfile       # Build api-gateway image
+├── strategy-engine/Dockerfile   # Build strategy-engine image
+├── frontend/Dockerfile          # Build frontend image
+├── frontend/nginx.conf          # Nginx config for SPA routing
+└── docker-compose.yml           # Full stack: Mongo + Redis + services
 ```
 
 ---
@@ -237,7 +242,9 @@ f1-strategy-simulator/
 - Python 3.11+
 - Docker & Docker Compose (for local Mongo + Redis)
 
-### 1. Clone & install
+### Option A: Local Development (Recommended for Active Development)
+
+#### 1. Clone & install
 
 ```bash
 git clone https://github.com/rayan-1005/f1-strategy-simulator
@@ -251,36 +258,38 @@ cd ../api-gateway && npm install
 
 # Strategy Engine
 cd ../strategy-engine && pip install -r requirements.txt
+
+# Scripts
+cd ../scripts && pip install -r requirements.txt
 ```
 
-### 2. Start infrastructure
+#### 2. Start infrastructure
 
 ```bash
-docker-compose up -d   # starts MongoDB + Redis
+docker-compose up -d   # starts MongoDB + Redis only
 ```
 
-### 3. Seed race data
+#### 3. Seed race data
 
 ```bash
 cd scripts
-python -m pip install -r requirements.txt
 node seed_races.js       # pulls 2018-2024 race list via FastF1
 node seed_lap_data.js    # pulls lap data via FastF1 (can take a while)
 ```
 
 On Windows, point the shim at your venv if needed:
 ```powershell
-$env:PYTHON="D:\Projects\f1-strategy-simulator\.venv\Scripts\python.exe"
+$env:PYTHON="path\to\.venv\Scripts\python.exe"
 ```
 
 Optional flags:
 ```bash
-node seed_races.js --start=2018 --end=2024
-node seed_lap_data.js --season=2023 --round=1
-node seed_lap_data.js --season=2023 --limit=5000
+node seed_races.js --start=2021 --end=2024
+node seed_lap_data.js --season=2024
+node seed_lap_data.js --season=2024 --round=1
 ```
 
-### 4. Run all services
+#### 4. Run all services (3 terminals)
 
 ```bash
 # Terminal 1 — Strategy Engine
@@ -295,7 +304,7 @@ cd frontend && npm run dev
 
 Open [http://localhost:5173](http://localhost:5173)
 
-### Environment Variables
+#### Environment Variables
 
 Create `api-gateway/.env`:
 
@@ -304,8 +313,59 @@ MONGO_URL=mongodb://localhost:27017/f1sim
 REDIS_URL=redis://localhost:6379
 STRATEGY_ENGINE_URL=http://localhost:8000
 PORT=3001
-FASTF1_CACHE=./scripts/.fastf1-cache
 ```
+
+---
+
+### Option B: Full Docker (Recommended for Production/Demo)
+
+#### 1. Build services
+
+```bash
+# Build all
+npm run build         # api-gateway
+cd ../frontend && npm run build
+cd ..
+```
+
+#### 2. Seed data (before docker-compose)
+
+```bash
+cd scripts
+node seed_races.js --start=2021 --end=2024
+node seed_lap_data.js --season=2021
+node seed_lap_data.js --season=2022
+node seed_lap_data.js --season=2023
+node seed_lap_data.js --season=2024
+```
+
+(Or skip for demo: default fallback data in Backtest page)
+
+#### 3. Start all services
+
+```bash
+docker-compose up
+```
+
+Access:
+- **Frontend:** `http://localhost`
+- **API Gateway:** `http://localhost:3001`
+- **Strategy Engine:** `http://localhost:8000`
+
+---
+
+### Environment Variables (Docker)
+
+Set in `api-gateway/.env` or pass to Docker:
+
+```env
+MONGO_URL=mongodb://mongo:27017/f1sim
+REDIS_URL=redis://redis:6379
+STRATEGY_ENGINE_URL=http://strategy-engine:8000
+PORT=3001
+```
+
+Services communicate via docker network `f1sim-network`.
 
 ---
 
