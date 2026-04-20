@@ -13,6 +13,9 @@ build/
 .env
 .env.*
 
+# FastF1
+.fastf1-cache/
+
 # Logs
 *.log
 
